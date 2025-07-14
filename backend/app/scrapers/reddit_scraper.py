@@ -24,11 +24,14 @@ def scrape_subreddit(subreddit: str, max_posts: int = 10):
         if not title:
             continue
 
+        flair_span = post.find("span", class_="linkflairlabel")
+        tag = flair_span.text.strip() if flair_span else None
         post_data = {
             "title": title.text.strip(),
             "link": title["href"],
             "subreddit": subreddit,
-            "scraped_at": datetime.now(UTC)
+            "scraped_at": datetime.now(UTC),
+            "tag": tag or "General"
         }
 
         posts.append(post_data)

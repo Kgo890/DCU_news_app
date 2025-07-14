@@ -1,8 +1,12 @@
 from bson import ObjectId
-
-from backend.app.db.mongo import posts_collection
 import datetime
 from typing import List, Dict
+
+from bson.errors import InvalidId
+
+from backend.app.db.mongo import posts_collection
+from backend.app.utils.verified_subreddit import VERIFIED_SUBREDDIT
+from fastapi import HTTPException
 
 UTC = datetime.timezone.utc
 
@@ -13,19 +17,26 @@ def serialize_post(post):
         "title": post["title"],
         "link": post["link"],
         "subreddit": post["subreddit"],
+        "tag": post.get("tag", "General"),
         "scraped_at": post["scraped_at"].isoformat() if isinstance(post["scraped_at"], datetime.datetime) else str(
             post["scraped_at"])
     }
 
 
-def save_reddit_posts(posts: List[Dict], subreddit: str) -> List[Dict]:
+def save_reddit_posts(posts: List[Dict], subreddit: str, tag: str = "General") -> List[Dict]:
     inserted_posts = []
     for post in posts:
         if posts_collection.find_one({"link": post["link"]}):
             continue
+        if not is_verified_subreddit(subreddit):
+            raise HTTPException(
+                status_code=403,
+                detail=f"The account '{subreddit}' is not verified. Check /reddit/verified_accounts for the list."
+            )
         post.update({
             "subreddit": subreddit,
-            "scraped_at": datetime.datetime.now(UTC)
+            "scraped_at": datetime.datetime.now(UTC),
+            "tag": post.get("tag", tag).strip().capitalize()
         })
 
         result = posts_collection.insert_one(post)
@@ -46,9 +57,10 @@ def fetch_all_posts():
 
 def get_posts_by_subreddit(subreddit: str):
     results = []
-    posts = posts_collection.find({"subreddit": subreddit})
+    posts = list(posts_collection.find({"subreddit": subreddit}))
     if not posts:
-        return {"error": f"{subreddit} was not found in your database"}
+        raise HTTPException(status_code=404, detail=f"{subreddit} was not found in your database.")
+
     for post in posts:
         serialized_post = serialize_post(post)
         results.append(serialized_post)
@@ -62,7 +74,7 @@ def get_posts_by_date_range(start_date: str, end_date: str):
         start = datetime.datetime.fromisoformat(start_date)
         end = datetime.datetime.fromisoformat(end_date)
     except ValueError:
-        return {"error": "Invalid date format. Use ISO format like '2025-07-01T00:00:00'"}
+        raise HTTPException(status_code=400, detail="Invalid date format. Use ISO format like '2025-07-01T00:00:00'")
 
     query = {
         "scraped_at": {
@@ -71,9 +83,9 @@ def get_posts_by_date_range(start_date: str, end_date: str):
         }
     }
 
-    posts = posts_collection.find(query)
+    posts = list(posts_collection.find(query))
     if not posts:
-        return {"error": "No posts found in the given date range."}
+        raise HTTPException(status_code=404, detail="No posts found in the given date range.")
 
     for post in posts:
         serialized_post = serialize_post(post)
@@ -85,9 +97,9 @@ def get_posts_by_date_range(start_date: str, end_date: str):
 def get_posts_by_keyword(keyword: str):
     results = []
     query = {"title": {"$regex": keyword, "$options": "i"}}
-    posts = posts_collection.find(query)
+    posts = list(posts_collection.find(query))
     if not posts:
-        return {"error": f"{keyword} was not found in your database"}
+        raise HTTPException(status_code=404, detail=f"{keyword} was not found in your database")
 
     for post in posts:
         serialized_post = serialize_post(post)
@@ -118,16 +130,20 @@ def get_daily_top_posts():
     return results
 
 
+def is_verified_subreddit(subreddit: str) -> bool:
+    return subreddit in VERIFIED_SUBREDDIT
+
+
 def delete_post_by_id(post_id: str):
     try:
         obj_id = ObjectId(post_id)
-    except ValueError:
-        return {"error": f"Invalid post ID format: {post_id}"}
+    except InvalidId:
+        raise HTTPException(status_code=400, detail=f"Invalid post ID format: {post_id}")
 
     result = posts_collection.delete_one({"_id": obj_id})
 
     if result.deleted_count == 0:
-        return {"error": f"The post with the ID {post_id} was not found in the database"}
+        raise HTTPException(status_code=404, detail=f"The post with the ID {post_id} was not found in the database")
 
     return {"message": f"The post with the ID {post_id} has been deleted from the database"}
 
