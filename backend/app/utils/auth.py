@@ -2,19 +2,23 @@ import datetime
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from backend.app.db.mongo import users_collection, blacklist_collection
 
+env_path = Path(__file__).resolve().parents[2] / ".env"
+
+load_dotenv(dotenv_path=env_path)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 UTC = datetime.timezone.utc
 
-load_dotenv()
-
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = os.getenv("JWT_ALGORITHM")
+
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 15))
 REFRESH_TOKEN_EXPIRE_MINUTES = int(os.getenv("REFRESH_TOKEN_EXPIRE_MINUTES", 60 * 24 * 7))
 

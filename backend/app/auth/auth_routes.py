@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from backend.app.db.mongo import users_collection, blacklist_collection
-from backend.app.schemas.user_schemas import UserRegister, UserLogin, PasswordReset
+from backend.app.schemas.user_schemas import UserRegister, UserLogin, PasswordReset, TokenResponse, RefreshTokenRequest
 from backend.app.utils.auth import (
     hash_password, verify_password,
     create_access_token, create_refresh_token,
@@ -28,13 +28,22 @@ def register(user: UserRegister):
 
 
 @router.post("/login")
-def login(user: UserLogin):
-    found = users_collection.find_one({"email": user.email})
-    if not found or not verify_password(user.password, found["hashed_password"]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+def login(user_credentials: UserLogin):
+    print("LOGIN ROUTE HIT")
 
-    access_token = create_access_token({"sub": user.email})
-    refresh_token = create_refresh_token({"sub": user.email})
+    user = users_collection.find_one({"email": user_credentials.email})
+    if not user:
+        print("User not found")
+        raise HTTPException(status_code=400, detail="Invalid email or password")
+
+    print("Verifying password")
+    if not verify_password(user_credentials.password, user["hashed_password"]):
+        print("Password mismatch")
+        raise HTTPException(status_code=400, detail="Invalid email or password")
+
+    print("Creating tokens...")
+    access_token = create_access_token({"sub": user_credentials.email})
+    refresh_token = create_refresh_token({"sub": user_credentials.email})
 
     return {
         "access_token": access_token,
@@ -43,10 +52,9 @@ def login(user: UserLogin):
     }
 
 
-@router.post("/refresh")
-async def refreshing_token(request: Request):
-    body = await request.json()
-    token = body.get("refresh_token")
+@router.post("/refresh", response_model=TokenResponse)
+async def refreshing_token(data: RefreshTokenRequest):
+    token = data.refresh_token
     if not token:
         raise HTTPException(status_code=400, detail="Refresh token is missing.")
 
