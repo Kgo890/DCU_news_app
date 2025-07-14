@@ -10,3 +10,4 @@ client = MongoClient(MONGO_URI)
 db = client["dcu_news"]
 posts_collection = db["reddit_posts"]
 users_collection = db["user_account"]
+blacklist_collection = db["blacklisted_tokens"]
