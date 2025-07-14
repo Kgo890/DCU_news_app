@@ -1,9 +1,8 @@
-from fastapi import HTTPException
-
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from backend.app.db.save_posts import *
 from backend.app.scrapers.reddit_scraper import scrape_subreddit
 from backend.app.utils.verified_subreddit import VERIFIED_SUBREDDIT
+
 router = APIRouter(prefix="/reddit", tags=["Reddit"])
 
 
@@ -37,6 +36,7 @@ async def getting_posts_by_subreddit(subreddit: str):
 @router.get("/posts_by_date_range")
 async def getting_posts_by_date(from_date: str, to_date: str):
     return get_posts_by_date_range(from_date, to_date)
+
 
 @router.get("/posts_by_keyword")
 async def getting_posts_by_keyword(keyword: str):
