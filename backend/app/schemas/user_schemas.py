@@ -12,6 +12,10 @@ class UserLogin(BaseModel):
     password: str
 
 
+class LogoutRequest(BaseModel):
+    refresh_token: str
+
+
 class PasswordReset(BaseModel):
     email: EmailStr
     current_password: str

@@ -1,16 +1,27 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.app.db.mongo import users_collection, blacklist_collection
-from backend.app.schemas.user_schemas import UserRegister, UserLogin, PasswordReset, TokenResponse, RefreshTokenRequest
-from backend.app.utils.auth import (
-    hash_password, verify_password,
-    create_access_token, create_refresh_token,
-    decode_token, get_current_user, blacklist_token
+from backend.app.schemas.user_schemas import (
+    UserRegister,
+    UserLogin,
+    PasswordReset,
+    TokenResponse,
+    RefreshTokenRequest,
+    LogoutRequest
 )
-from fastapi.security import OAuth2PasswordBearer
+from backend.app.utils.auth import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    blacklist_token,
+    get_current_user
+)
 import datetime
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+security = HTTPBearer()
 
 
 @router.post("/register")
@@ -30,18 +41,18 @@ def register(user: UserRegister):
 @router.post("/login")
 def login(user_credentials: UserLogin):
     print("LOGIN ROUTE HIT")
+    print("Credentials received:", user_credentials)
 
     user = users_collection.find_one({"email": user_credentials.email})
     if not user:
         print("User not found")
         raise HTTPException(status_code=400, detail="Invalid email or password")
 
-    print("Verifying password")
     if not verify_password(user_credentials.password, user["hashed_password"]):
         print("Password mismatch")
         raise HTTPException(status_code=400, detail="Invalid email or password")
 
-    print("Creating tokens...")
+    print("Login successful")
     access_token = create_access_token({"sub": user_credentials.email})
     refresh_token = create_refresh_token({"sub": user_credentials.email})
 
@@ -57,6 +68,9 @@ async def refreshing_token(data: RefreshTokenRequest):
     token = data.refresh_token
     if not token:
         raise HTTPException(status_code=400, detail="Refresh token is missing.")
+
+    if blacklist_collection.find_one({"token": token}):
+        raise HTTPException(status_code=401, detail="Refresh token is blacklisted.")
 
     payload = decode_token(token)
     if not payload:
@@ -105,10 +119,14 @@ def reset_password(data: PasswordReset):
 
 
 @router.post("/logout")
-def logging_out(request: Request):
-    token = request.headers.get("Authorization")
-    if not token or not token.startswith("Bearer "):
-        raise HTTPException(status_code=400, detail="Missing or invalid token.")
-    token = token.split(" ")[1]
-    blacklist_token(token)
-    return {"message": "Token has been revoked (blacklisted)."}
+def logging_out(
+        data: LogoutRequest,
+        credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    access_token = credentials.credentials
+    refresh_token = data.refresh_token
+
+    blacklist_token(access_token)
+    blacklist_token(refresh_token)
+
+    return {"message": "Access and refresh tokens revoked (blacklisted)."}

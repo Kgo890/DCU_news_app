@@ -1,41 +1,25 @@
 import datetime
-from jose import JWTError, jwt
-from passlib.context import CryptContext
 import os
 from pathlib import Path
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.app.db.mongo import users_collection, blacklist_collection
 
 env_path = Path(__file__).resolve().parents[2] / ".env"
-
 load_dotenv(dotenv_path=env_path)
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-UTC = datetime.timezone.utc
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = os.getenv("JWT_ALGORITHM")
-
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 15))
 REFRESH_TOKEN_EXPIRE_MINUTES = int(os.getenv("REFRESH_TOKEN_EXPIRE_MINUTES", 60 * 24 * 7))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
 
-
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    payload = decode_token(token)
-    if not payload or "sub" not in payload:
-        raise HTTPException(status_code=401, detail="Invalid token.")
-    if blacklist_collection.find_one({"token": token}):
-        raise HTTPException(status_code=401, detail="Token has been revoked")
-    email = payload["sub"]
-    user = users_collection.find_one({"email": email})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    return user
+UTC = datetime.timezone.utc
 
 
 def hash_password(password: str) -> str:
@@ -61,8 +45,6 @@ def create_refresh_token(data: dict) -> str:
 
 
 def decode_token(token: str):
-    if is_token_blacklisted(token):
-        return None
     try:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
@@ -75,3 +57,25 @@ def blacklist_token(token: str):
 
 def is_token_blacklisted(token: str) -> bool:
     return blacklist_collection.find_one({"token": token}) is not None
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    print("\n--- get_current_user called ---")
+    print("TOKEN:", token)
+
+    if is_token_blacklisted(token):
+        raise HTTPException(status_code=401, detail="Token has been revoked")
+
+    payload = decode_token(token)
+    if not payload or "sub" not in payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token.")
+
+    email = payload["sub"]
+    user = users_collection.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    return {"user": user, "token": token}
+
+
