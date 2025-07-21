@@ -1,39 +1,103 @@
+from typing import List, Dict
 import requests
-from bs4 import BeautifulSoup
-from datetime import datetime, timezone
+from backend.app.db.mongo import posts_collection
 
-UTC = timezone.utc
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-}
+HEADERS = {"User-Agent": "dcu-news-app-bot/0.1"}
 
 
-def scrape_subreddit(subreddit: str, max_posts: int = 10):
-    url = f"https://old.reddit.com/r/{subreddit}/"
-    response = requests.get(url, headers=HEADERS)
+def reddit_scrape(subreddit: str, sort: str = "hot", limit: int = 10, time_filter: str = "day") -> List[Dict]:
+    url = f"https://www.reddit.com/r/{subreddit}/{sort}.json"
+    params = {
+        "limit": 25,
+        "t": time_filter if sort == "top" else None
+    }
 
-    if response.status_code != 200:
-        raise Exception(f"Failed to load subreddit: {subreddit} (Status code: {response.status_code})")
+    after = None
+    collected_posts = []
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    posts = []
+    while len(collected_posts) < limit:
+        if after:
+            params["after"] = after
 
-    for post in soup.find_all("div", class_="thing", limit=max_posts):
-        title = post.find("a", class_="title")
-        if not title:
-            continue
+        response = requests.get(url, headers=HEADERS, params=params)
+        if response.status_code != 200:
+            raise Exception(f"Reddit API request failed with status {response.status_code}")
 
-        flair_span = post.find("span", class_="linkflairlabel")
-        tag = flair_span.text.strip() if flair_span else None
-        post_data = {
-            "title": title.text.strip(),
-            "link": title["href"],
-            "subreddit": subreddit,
-            "scraped_at": datetime.now(UTC),
-            "tag": tag or "General"
-        }
+        data = response.json().get("data", {})
+        posts = data.get("children", [])
+        after = data.get("after")
 
-        posts.append(post_data)
+        if not posts:
+            break
 
-    return posts
+        for post in posts:
+            p = post["data"]
+            if p.get("stickied"):
+                continue
+
+            permalink = f"https://reddit.com{p.get('permalink')}"
+            if posts_collection.find_one({"link": permalink}):
+                continue
+
+            video_url = None
+            audio_url = None
+            has_audio = False
+            is_reddit_video = bool(video_url)
+            image_url = None
+
+            # Check for Reddit-hosted video
+            if "media" in p and p["media"]:
+                reddit_video = p["media"].get("reddit_video")
+                if reddit_video:
+                    video_url = reddit_video.get("fallback_url")
+                    has_audio = reddit_video.get("has_audio", False)
+                    is_reddit_video = True
+
+                    if video_url and has_audio:
+                        try:
+                            base_url = video_url.split("/DASH_")[0]
+                            audio_url = f"{base_url}/DASH_audio.mp4"
+                        except Exception:
+                            audio_url = None
+
+            # Fallback to image
+            if not video_url:
+                if "preview" in p:
+                    try:
+                        image_url = p["preview"]["images"][0]["source"]["url"]
+                        if image_url:
+                            image_url = image_url.replace("&amp;", "&")
+                    except (KeyError, IndexError):
+                        pass
+
+                if not image_url and p.get("url", "").lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
+                    image_url = p["url"]
+
+                if not image_url and p.get("thumbnail", "").startswith("http"):
+                    image_url = p["thumbnail"]
+
+            collected_posts.append({
+                "title": p.get("title"),
+                "author": p.get("author"),
+                "link": permalink,
+                "created_utc": p.get("created_utc"),
+                "subreddit": p.get("subreddit"),
+                "score": p.get("score"),
+                "num_comments": p.get("num_comments"),
+                "post_id": p.get("id"),
+                "tags": [],
+                "type": "Reddit",
+                "image_url": image_url,
+                "video_url": video_url,
+                "audio_url": audio_url,
+                "has_audio": has_audio,
+                "is_reddit_video": is_reddit_video,
+            })
+
+            if len(collected_posts) >= limit:
+                break
+
+        if not after:
+            break
+
+    return collected_posts

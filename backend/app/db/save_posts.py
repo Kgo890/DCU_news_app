@@ -1,6 +1,6 @@
 from bson import ObjectId
 import datetime
-from typing import List, Dict
+from typing import List, Dict, Any
 
 from bson.errors import InvalidId
 
@@ -11,13 +11,18 @@ from fastapi import HTTPException
 UTC = datetime.timezone.utc
 
 
-def serialize_post(post):
+def serialize_post(post: dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": str(post["_id"]),
         "title": post["title"],
         "link": post["link"],
         "subreddit": post["subreddit"],
         "tag": post.get("tag", "General"),
+        "image_url": post.get("image_url"),
+        "video_url": post.get("video_url"),
+        "audio_url": post.get("audio_url"),
+        "has_audio": post.get("has_audio", False),
+        "is_reddit_video": post.get("is_reddit_video", False),
         "scraped_at": post["scraped_at"].isoformat() if isinstance(post["scraped_at"], datetime.datetime) else str(
             post["scraped_at"])
     }
@@ -25,24 +30,31 @@ def serialize_post(post):
 
 def save_reddit_posts(posts: List[Dict], subreddit: str, tag: str = "General") -> List[Dict]:
     inserted_posts = []
+
     for post in posts:
+
         if posts_collection.find_one({"link": post["link"]}):
+            print("Duplicate found. Skipping.")
             continue
+
         if not is_verified_subreddit(subreddit):
             raise HTTPException(
                 status_code=403,
                 detail=f"The account '{subreddit}' is not verified. Check /reddit/verified_accounts for the list."
             )
+
         post.update({
             "subreddit": subreddit,
             "scraped_at": datetime.datetime.now(UTC),
-            "tag": post.get("tag", tag).strip().capitalize()
+            "tag": post.get("tag", tag).strip().title()
         })
 
         result = posts_collection.insert_one(post)
         post["_id"] = str(result.inserted_id)
         inserted_posts.append(post)
+        print(f"Saved: {post['title']}")
 
+    print(f"Done. Total saved: {len(inserted_posts)}")
     return inserted_posts
 
 

@@ -1,21 +1,29 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Query
 from backend.app.db.save_posts import *
-from backend.app.scrapers.reddit_scraper import scrape_subreddit
+from backend.app.scrapers.reddit_scraper import reddit_scrape
 from backend.app.utils.verified_subreddit import VERIFIED_SUBREDDIT
 
 router = APIRouter(prefix="/reddit", tags=["Reddit"])
 
 
 @router.post("/scrape")
-async def scrape(subreddit: str = "DC_Cinematic", max_posts: int = 3, tag: str = "NEWS"):
+async def scrape_subreddit(
+        subreddit: str = Query(...),
+        max_posts: int = Query(10),
+        sort: str = Query("hot"),
+        time_filter: str = Query("day")
+):
     if not is_verified_subreddit(subreddit):
-        raise HTTPException(
-            status_code=403,
-            detail=f"The account '{subreddit}' is not verified. Check /reddit/verified_subreddits for the list."
-        )
-    posts = scrape_subreddit(subreddit, max_posts)
-    saved = save_reddit_posts(posts, subreddit, tag)
-    return saved
+        raise HTTPException(status_code=403, detail=f"Subreddit '{subreddit}' is not verified.")
+
+    try:
+        posts = reddit_scrape(subreddit=subreddit, sort=sort, limit=max_posts, time_filter=time_filter)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Reddit scrape failed: {str(e)}")
+
+    saved_posts = save_reddit_posts(posts, subreddit)
+
+    return {"message": f"Success: {len(saved_posts)} posts saved", "data": saved_posts}
 
 
 @router.get("/posts")
@@ -23,7 +31,7 @@ async def get_all_posts():
     return fetch_all_posts()
 
 
-@router.get("/posts_by_subreddit")
+@router.get("/posts-by-subreddit")
 async def getting_posts_by_subreddit(subreddit: str):
     if not is_verified_subreddit(subreddit):
         raise HTTPException(
@@ -33,31 +41,33 @@ async def getting_posts_by_subreddit(subreddit: str):
     return get_posts_by_subreddit(subreddit)
 
 
-@router.get("/posts_by_date_range")
+@router.get("/posts-by-date-range")
 async def getting_posts_by_date(from_date: str, to_date: str):
     return get_posts_by_date_range(from_date, to_date)
 
 
-@router.get("/posts_by_keyword")
+@router.get("/posts-by-keyword")
 async def getting_posts_by_keyword(keyword: str):
-    return get_posts_by_keyword(keyword)
+    posts = get_posts_by_keyword(keyword)
+    return {"posts": posts}
 
 
 @router.get("/timeline")
 async def getting_daily_top_posts():
-    return get_daily_top_posts()
+    results = get_daily_top_posts()
+    return {"message": results}
 
 
-@router.get("/verified_subreddits")
+@router.get("/verified-subreddits")
 async def get_verified_subreddits():
     return {"verified_subreddits": VERIFIED_SUBREDDIT}
 
 
-@router.delete("/delete_post_by_id")
-async def deleting_post_by_id(post_id: str):
+@router.delete("/delete-post-by-id")
+async def deleting_post_by_id(post_id: str = Query(...)):
     return delete_post_by_id(post_id)
 
 
-@router.delete("/delete_all_post")
+@router.delete("/delete-all-post")
 async def deleting_all_post():
     return delete_all_posts()
