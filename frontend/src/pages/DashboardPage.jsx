@@ -88,7 +88,7 @@ export default function Dashboard() {
       const response = await api.get("/reddit/posts-by-keyword", {
         params: { keyword },
       });
-      setReddit(response.data);
+      setReddit(response.data.posts);
     } catch (error) {
       console.error("Post by keyword failed", error);
     }
