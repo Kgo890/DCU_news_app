@@ -1,29 +1,47 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 from backend.app.db.save_posts import *
 from backend.app.scrapers.reddit_scraper import reddit_scrape
 from backend.app.utils.verified_subreddit import VERIFIED_SUBREDDIT
+from backend.app.db.mongo import posts_collection
 
 router = APIRouter(prefix="/reddit", tags=["Reddit"])
 
 
 @router.post("/scrape")
 async def scrape_subreddit(
-        subreddit: str = Query(...),
-        max_posts: int = Query(10),
-        sort: str = Query("hot"),
-        time_filter: str = Query("day")
+    subreddit: str = Query(...),
+    max_posts: int = Query(10),
+    sort: str = Query("hot"),
+    time_filter: str = Query("day")
 ):
     if not is_verified_subreddit(subreddit):
         raise HTTPException(status_code=403, detail=f"Subreddit '{subreddit}' is not verified.")
 
     try:
-        posts = reddit_scrape(subreddit=subreddit, sort=sort, limit=max_posts, time_filter=time_filter)
+        posts = await reddit_scrape(
+            subreddit=subreddit,
+            sort=sort,
+            limit=max_posts,
+            time_filter=time_filter
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Reddit scrape failed: {str(e)}")
 
-    saved_posts = save_reddit_posts(posts, subreddit)
+    new_posts = []
+    for post in posts:
+        if not posts_collection.find_one({"link": post["link"]}):
+            new_posts.append(post)
 
-    return {"message": f"Success: {len(saved_posts)} posts saved", "data": saved_posts}
+    if not new_posts:
+        return {
+            "message": "No new posts to save.",
+            "existing_count": len(posts),
+            "data": []
+        }
+
+    saved_posts = save_reddit_posts(new_posts, subreddit)
+
+    return {"message": f"Success: {len(saved_posts)} new posts saved", "data": saved_posts}
 
 
 @router.get("/posts")

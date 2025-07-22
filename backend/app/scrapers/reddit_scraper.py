@@ -1,103 +1,93 @@
+import asyncpraw
+import os
 from typing import List, Dict
-import requests
+from dotenv import load_dotenv
 from backend.app.db.mongo import posts_collection
 
-HEADERS = {"User-Agent": "dcu-news-app-bot/0.1"}
+load_dotenv()
+
+REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
+REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
+REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT")
 
 
-def reddit_scrape(subreddit: str, sort: str = "hot", limit: int = 10, time_filter: str = "day") -> List[Dict]:
-    url = f"https://www.reddit.com/r/{subreddit}/{sort}.json"
-    params = {
-        "limit": 25,
-        "t": time_filter if sort == "top" else None
-    }
+async def reddit_scrape(
+        subreddit: str,
+        sort: str = "hot",
+        limit: int = 10,
+        time_filter: str = "day"
+) -> List[Dict]:
+    reddit = asyncpraw.Reddit(
+        client_id=REDDIT_CLIENT_ID,
+        client_secret=REDDIT_CLIENT_SECRET,
+        user_agent=REDDIT_USER_AGENT
+    )
 
-    after = None
+    subreddit_obj = await reddit.subreddit(subreddit)
+
+    if sort == "new":
+        submissions = subreddit_obj.new(limit=limit)
+    elif sort == "top":
+        submissions = subreddit_obj.top(limit=limit, time_filter=time_filter)
+    else:
+        submissions = subreddit_obj.hot(limit=limit)
+
     collected_posts = []
+    async for p in submissions:
+        if p.stickied:
+            continue
 
-    while len(collected_posts) < limit:
-        if after:
-            params["after"] = after
+        if posts_collection.find_one({"link": f"https://reddit.com{p.permalink}"}):
+            continue
 
-        response = requests.get(url, headers=HEADERS, params=params)
-        if response.status_code != 200:
-            raise Exception(f"Reddit API request failed with status {response.status_code}")
+        video_url = None
+        audio_url = None
+        has_audio = False
+        is_reddit_video = False
+        image_url = None
 
-        data = response.json().get("data", {})
-        posts = data.get("children", [])
-        after = data.get("after")
-
-        if not posts:
-            break
-
-        for post in posts:
-            p = post["data"]
-            if p.get("stickied"):
-                continue
-
-            permalink = f"https://reddit.com{p.get('permalink')}"
-            if posts_collection.find_one({"link": permalink}):
-                continue
-
-            video_url = None
-            audio_url = None
-            has_audio = False
-            is_reddit_video = bool(video_url)
-            image_url = None
-
-            # Check for Reddit-hosted video
-            if "media" in p and p["media"]:
-                reddit_video = p["media"].get("reddit_video")
-                if reddit_video:
-                    video_url = reddit_video.get("fallback_url")
-                    has_audio = reddit_video.get("has_audio", False)
-                    is_reddit_video = True
-
-                    if video_url and has_audio:
-                        try:
-                            base_url = video_url.split("/DASH_")[0]
-                            audio_url = f"{base_url}/DASH_audio.mp4"
-                        except Exception:
-                            audio_url = None
-
-            # Fallback to image
-            if not video_url:
-                if "preview" in p:
+        # Handle media
+        if hasattr(p, "media") and p.media:
+            reddit_video = p.media.get("reddit_video") if isinstance(p.media, dict) else None
+            if reddit_video:
+                video_url = reddit_video.get("fallback_url")
+                has_audio = reddit_video.get("has_audio", False)
+                is_reddit_video = True
+                if video_url and has_audio:
                     try:
-                        image_url = p["preview"]["images"][0]["source"]["url"]
-                        if image_url:
-                            image_url = image_url.replace("&amp;", "&")
-                    except (KeyError, IndexError):
-                        pass
+                        base_url = video_url.split("/DASH_")[0]
+                        audio_url = f"{base_url}/DASH_audio.mp4"
+                    except Exception:
+                        audio_url = None
 
-                if not image_url and p.get("url", "").lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
-                    image_url = p["url"]
+        if not video_url:
+            if hasattr(p, "preview") and p.preview:
+                try:
+                    image_url = p.preview["images"][0]["source"]["url"].replace("&amp;", "&")
+                except (KeyError, IndexError):
+                    pass
+            if not image_url and p.url.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
+                image_url = p.url
+            if not image_url and p.thumbnail.startswith("http"):
+                image_url = p.thumbnail
 
-                if not image_url and p.get("thumbnail", "").startswith("http"):
-                    image_url = p["thumbnail"]
+        collected_posts.append({
+            "title": p.title,
+            "author": p.author.name if p.author else None,
+            "link": f"https://reddit.com{p.permalink}",
+            "created_utc": p.created_utc,
+            "subreddit": p.subreddit.display_name,
+            "score": p.score,
+            "num_comments": p.num_comments,
+            "post_id": p.id,
+            "tags": [],
+            "type": "Reddit",
+            "image_url": image_url,
+            "video_url": video_url,
+            "audio_url": audio_url,
+            "has_audio": has_audio,
+            "is_reddit_video": is_reddit_video,
+        })
 
-            collected_posts.append({
-                "title": p.get("title"),
-                "author": p.get("author"),
-                "link": permalink,
-                "created_utc": p.get("created_utc"),
-                "subreddit": p.get("subreddit"),
-                "score": p.get("score"),
-                "num_comments": p.get("num_comments"),
-                "post_id": p.get("id"),
-                "tags": [],
-                "type": "Reddit",
-                "image_url": image_url,
-                "video_url": video_url,
-                "audio_url": audio_url,
-                "has_audio": has_audio,
-                "is_reddit_video": is_reddit_video,
-            })
-
-            if len(collected_posts) >= limit:
-                break
-
-        if not after:
-            break
-
+    await reddit.close()
     return collected_posts
