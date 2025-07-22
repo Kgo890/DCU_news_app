@@ -1,7 +1,7 @@
 import axios from "axios";
 
 
-const BASE_URL = "https://dcu-news-app.onrender.com"
+const BASE_URL = process.env.REACT_APP_API,
 const api = axios.create({
   baseURL: BASE_URL,
   headers: {
