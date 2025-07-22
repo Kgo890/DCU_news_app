@@ -22,7 +22,8 @@ export default function Dashboard() {
   const [reddit, setReddit] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const BASE_URL = "http://localhost:8000/reddit";
+  const BASE_URL = process.env.REACT_APP_API + "/reddit";
+
 
   useEffect(() => {
     getAllPosts();

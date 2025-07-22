@@ -18,7 +18,7 @@ export default function ResetPasswordPage() {
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [searchQuery, setSearchQuery] = useState("");
 
-  const BASE_URL = "http://localhost:8000/auth";
+  const BASE_URL = process.env.REACT_APP_API + "/auth";
 
   async function handleReset() {
     try {

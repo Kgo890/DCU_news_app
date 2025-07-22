@@ -20,7 +20,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
-  const BASE_URL = "http://localhost:8000/auth";
+  const BASE_URL = process.env.REACT_APP_API + "/auth";
 
   async function handleRegister() {
     if (!email || !username || !password) {

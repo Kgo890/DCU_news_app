@@ -19,7 +19,7 @@ export default function NewPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
 
-  const BASE_URL = "http://localhost:8000/auth";
+  const BASE_URL = process.env.REACT_APP_API + "/auth";
 
   async function savePage() {
     try {
