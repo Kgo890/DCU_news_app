@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import api from "../auth/axios";
+import RedditPostCard from "../components/RedditPostCard";
 import {
   Container,
   Typography,
@@ -45,15 +46,7 @@ export default function CharacterPage() {
         <Grid container spacing={2}>
           {posts.map((post, index) => (
             <Grid item xs={12} sm={6} md={4} key={index}>
-              <Card>
-                <CardContent>
-                  <Typography variant="h6">{post.title}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    {post.subreddit} — {post.date}
-                  </Typography>
-                  <Typography variant="body2">{post.text}</Typography>
-                </CardContent>
-              </Card>
+                <RedditPostCard post={post} />
             </Grid>
           ))}
         </Grid>

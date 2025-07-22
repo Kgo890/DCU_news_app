@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../auth/axios";
 import {
   Container,
   Typography,
@@ -18,11 +18,10 @@ export default function ResetPasswordPage() {
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [searchQuery, setSearchQuery] = useState("");
 
-  const BASE_URL = process.env.REACT_APP_API + "/auth";
 
   async function handleReset() {
     try {
-      const response = await axios.post(`${BASE_URL}/reset-password`, {
+      const response = await api.post("/auth/reset-password", {
         email,
         current_password: currentPassword,
         new_password: newPassword,

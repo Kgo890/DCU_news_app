@@ -19,13 +19,12 @@ export default function NewPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
 
-  const BASE_URL = process.env.REACT_APP_API + "/auth";
 
   async function savePage() {
     try {
       const token = localStorage.getItem("access_token");
       const response = await api.post(
-        `${BASE_URL}/save-page`,
+        "/auth/save-page",
         { page },
         {
           headers: {

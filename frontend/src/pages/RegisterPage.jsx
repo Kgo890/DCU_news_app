@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../auth/axios";
 import {
   Container,
   Typography,
@@ -20,7 +20,6 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
-  const BASE_URL = process.env.REACT_APP_API + "/auth";
 
   async function handleRegister() {
     if (!email || !username || !password) {
@@ -33,7 +32,7 @@ export default function RegisterPage() {
     }
 
     try {
-      await axios.post(`${BASE_URL}/register`, {
+      await api.post("/auth/register", {
         email,
         username,
         password,

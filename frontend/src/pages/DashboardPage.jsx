@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../auth/axios";
 import {
   Box,
   Typography,
@@ -22,8 +22,6 @@ export default function Dashboard() {
   const [reddit, setReddit] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const BASE_URL = process.env.REACT_APP_API + "/reddit";
-
 
   useEffect(() => {
     getAllPosts();
@@ -31,7 +29,7 @@ export default function Dashboard() {
 
   async function getAllPosts() {
     try {
-      const response = await axios.get(`${BASE_URL}/posts`);
+      const response = await api.get("/reddit/posts");
       console.log("Post fetched:", response.data);
       setReddit(response.data);
     } catch (error) {
@@ -41,7 +39,7 @@ export default function Dashboard() {
 
   async function scrapingReddit() {
     try {
-      const response = await axios.post(`${BASE_URL}/scrape`, null, {
+      const response = await api.post("/reddit/scrape", null, {
         params: {
           subreddit,
           max_posts: parseInt(max_posts),
@@ -61,7 +59,7 @@ export default function Dashboard() {
 
   async function gettingPostsBySubreddit() {
     try {
-      const response = await axios.get(`${BASE_URL}/posts-by-subreddit`, {
+      const response = await api.get("/reddit/posts-by-subreddit", {
         params: { subreddit },
       });
       setReddit(response.data);
@@ -73,7 +71,7 @@ export default function Dashboard() {
 
   async function gettingPostsByDate() {
     try {
-      const response = await axios.get(`${BASE_URL}/posts-by-date-range`, {
+      const response = await api.get("/reddit/posts-by-date-range", {
         params: {
           from_date: `${from_date}T00:00:00`,
           to_date: `${to_date}T23:59:59`,
@@ -87,7 +85,7 @@ export default function Dashboard() {
 
   async function gettingPostsByKeyword() {
     try {
-      const response = await axios.get(`${BASE_URL}/posts-by-keyword`, {
+      const response = await api.get("/reddit/posts-by-keyword", {
         params: { keyword },
       });
       setReddit(response.data);
@@ -98,7 +96,7 @@ export default function Dashboard() {
 
   async function deletingAllPost() {
     try {
-      const response = await axios.delete(`${BASE_URL}/delete-all-post`);
+      const response = await api.delete("/reddit/delete-all-post");
       setReddit([]);
     } catch (error) {
       console.error("Delete all posts failed", error);
@@ -107,7 +105,7 @@ export default function Dashboard() {
 
   async function deletePostById(postId) {
     try {
-      const response = await axios.delete(`${BASE_URL}/delete-post-by-id`, {
+      const response = await axios.delete("/reddit/delete-post-by-id", {
         params: { post_id: postId },
       });
       console.log(response.data.message);
