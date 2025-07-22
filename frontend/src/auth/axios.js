@@ -1,7 +1,9 @@
 import axios from "axios";
 
+
+const BASE_URL = "https://dcu-news-app.onrender.com"
 const api = axios.create({
-  baseURL: "http://localhost:8000",
+  baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
@@ -39,7 +41,7 @@ api.interceptors.response.use(
       }
 
       try {
-        const res = await axios.post("http://localhost:8000/auth/refresh", {
+       const res = await axios.post(`${BASE_URL}/auth/refresh`, {
           refresh_token: refresh_token,
         });
 
