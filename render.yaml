@@ -1,13 +1,11 @@
 services:
   - type: web
-    name: dcu-fastapi-backend
+    name: dcu-news-api
     env: python
-    plan: free
-    buildCommand: "pip install -r backend/requirements.txt"
-    startCommand: "uvicorn backend.app.main:app --host=0.0.0.0 --port=10000"
-    runtime:
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port 10000
     envVars:
-      - key: MONGO_URL
-        value: YOUR_MONGODB_URI_HERE
-      - key: SECRET_KEY
-        value:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: PORT
+        value: 10000
