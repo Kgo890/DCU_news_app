@@ -105,7 +105,7 @@ export default function Dashboard() {
 
   async function deletePostById(postId) {
     try {
-      const response = await axios.delete("/reddit/delete-post-by-id", {
+      const response = await api.delete("/reddit/delete-post-by-id", {
         params: { post_id: postId },
       });
       console.log(response.data.message);
