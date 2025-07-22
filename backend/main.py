@@ -15,7 +15,7 @@ app = FastAPI(title="DCU Reddit News API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://dcu-news-app.onrender.com",
+        "https://dcu-news-app.vercel.com",
         "http://localhost:3000"
     ],
     allow_credentials=True,
